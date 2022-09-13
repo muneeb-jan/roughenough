@@ -25,6 +25,7 @@ use std::iter::Iterator;
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use std::process::exit;
 use std::time::{self, SystemTime, UNIX_EPOCH, Instant};
+use std::usize;
 use log::{LevelFilter, info};
 use mio::Events;
 use simple_logger::SimpleLogger;
@@ -446,6 +447,7 @@ fn main() {
     for _ in 0..num_requests {
         let nonce = create_nonce(version);
         let socket = UdpSocket::bind(if addr.is_ipv6() { "[::]:0" } else { "0.0.0.0:0" }).expect("Couldn't open UDP socket");
+            socket.set_nonblocking(true).unwrap();
         let request = make_request(version, &nonce, text_dump);
 
         if let Some(f) = file_for_requests.as_mut() {
@@ -464,7 +466,18 @@ fn main() {
     for (nonce, _, socket) in requests {
             //println!("[DEBUG_INFO] ENTER COLLECTING RESPONSES LOOP!");
         let mut buf = [0u8; 4096];
-        let resp_len = socket.recv_from(&mut buf).unwrap().0;
+            let resp = socket.recv_from(&mut buf);
+            let resp_len = match resp {
+                Ok((sz, _saddr)) => sz,
+                Err(_error) => continue
+            };
+            // NON BLOCKING LOOP: Should actually be implemented inside a loop. For more details, refer to ...
+            // https://doc.rust-lang.org/std/net/struct.UdpSocket.html#method.set_nonblocking
+            // I didn't use loop because I want to continue after error. I want control to return to main loop.
+
+            // let resp_len = socket
+            //     .recv_from(&mut buf)
+            //     .unwrap().0;
 
         if let Some(f) = file_for_responses.as_mut() {
             f.write_all(&buf[0..resp_len])
