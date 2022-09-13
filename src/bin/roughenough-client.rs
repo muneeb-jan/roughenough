@@ -15,6 +15,7 @@
 // for value_t_or_exit!()
 #[macro_use]
 extern crate clap;
+extern crate log;
 
 use std::alloc::System;
 use std::collections::HashMap;
@@ -24,6 +25,9 @@ use std::iter::Iterator;
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use std::process::exit;
 use std::time::{self, SystemTime, UNIX_EPOCH, Instant};
+use log::{LevelFilter, info};
+use mio::Events;
+use simple_logger::SimpleLogger;
 
 use byteorder::{LittleEndian, ReadBytesExt};
 use chrono::{Local, TimeZone};
@@ -310,6 +314,11 @@ impl ResponseHandler {
 }
 
 fn main() {
+    SimpleLogger::new()
+        .with_level(LevelFilter::Info)
+        .with_utc_timestamps()
+        .init()
+        .unwrap();
     let matches = App::new("roughenough client")
         .version(roughenough_version().as_ref())
         .arg(Arg::with_name("host")
@@ -342,7 +351,7 @@ fn main() {
             .long("time-format")
             .takes_value(true)
             .help("The strftime format string used to print the time received from the server.")
-            .default_value("%b %d %Y %H:%M:%S %Z")
+            .default_value("%b %d %Y %H:%M:%S.%f %Z")
         )
         .arg(Arg::with_name("num-requests")
             .short("n")
@@ -399,9 +408,9 @@ fn main() {
     let output_responses = matches.value_of("output-responses");
     let protocol = value_t_or_exit!(matches.value_of("protocol"), u8);
     let use_utc = matches.is_present("zulu");
-
+    let start_request = Instant::now();
     if verbose {
-        eprintln!("Requesting time from: {:?}:{:?}", host, port);
+        info!("Requesting time from: {:?}:{:?}", host, port);
     }
 
     let version = match protocol {
@@ -479,10 +488,16 @@ fn main() {
         };
 
         if verbose {
-            eprintln!(
+
+                info!(
                 "Received time from server: midpoint={:?}, radius={:?}, verified={} (merkle_index={})",
                 out, radius, verify_str, index
             );
+
+                // eprintln!(
+                //     "Received time from server: midpoint={:?}, radius={:?}, verified={} (merkle_index={})",
+                //     out, radius, verify_str, index
+                // );
         }
 
         if json {
@@ -494,4 +509,5 @@ fn main() {
             println!("{}", out);
         }
     }
+        println!("Time taken to complete: {}", start_request.elapsed().as_micros());
 }
