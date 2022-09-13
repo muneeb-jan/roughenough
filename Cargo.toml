@@ -56,3 +56,9 @@ criterion = "0.3"
 [[bench]]
 name = "roughenough-bench"
 harness = false
+
+[profile.release]
+debug = true
+
+[rust]
+debuginfo-level = 1
