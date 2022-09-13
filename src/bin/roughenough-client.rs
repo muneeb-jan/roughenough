@@ -16,11 +16,14 @@
 #[macro_use]
 extern crate clap;
 
+use std::alloc::System;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Cursor, Write};
 use std::iter::Iterator;
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
+use std::process::exit;
+use std::time::{self, SystemTime, UNIX_EPOCH, Instant};
 
 use byteorder::{LittleEndian, ReadBytesExt};
 use chrono::{Local, TimeZone};
@@ -128,22 +131,30 @@ fn verify_framing(buf: &[u8]) -> Result<(), Error> {
     Ok(())
 }
 
-fn stress_test_forever(ver: Version, addr: &SocketAddr) -> ! {
-    if !addr.ip().is_loopback() {
-        panic!(
-            "Cannot use non-loopback address {} for stress testing",
-            addr.ip()
-        );
-    }
+fn stress_test_forever(ver: Version, addr: &SocketAddr) -> () {
+    // if !addr.ip().is_loopback() {
+    //     panic!(
+    //         "Cannot use non-loopback address {} for stress testing",
+    //         addr.ip()
+    //     );
+    // }
 
-    println!("Stress testing!");
+    println!("Stress testing! for 10 seconds");
 
     let nonce = create_nonce(ver);
     let socket = UdpSocket::bind(if addr.is_ipv6() { "[::]:0" } else { "0.0.0.0:0" }).expect("Couldn't open UDP socket");
     let request = make_request(ver, &nonce, false);
+    let start = Instant::now();
+    println!("Start: {}", start.elapsed().as_millis());
     loop {
         socket.send_to(&request, addr).unwrap();
+        let elapsed = start.elapsed();
+        if elapsed.as_millis() > 10000 as u128{
+            println!("End at {}", elapsed.as_millis());
+            break;
     }
+    }
+    exit(0);
 }
 
 struct ResponseHandler {
