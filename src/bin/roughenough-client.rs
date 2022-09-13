@@ -66,6 +66,7 @@ fn create_nonce(ver: Version) -> Nonce {
 }
 
 fn make_request(ver: Version, nonce: &Nonce, text_dump: bool) -> Vec<u8> {
+    //println!("[DEBUG_INFO] Entering MAKE REQUEST!");
     let mut msg = RtMessage::with_capacity(3);
 
     match ver {
@@ -103,6 +104,7 @@ fn make_request(ver: Version, nonce: &Nonce, text_dump: bool) -> Vec<u8> {
                 eprintln!("Request = {}", msg);
             }
 
+            //println!("[DEBUG_INFO] RETURNING MAKE REQUEST MSG!");
             msg.encode_framed().unwrap()
         }
     }
@@ -319,6 +321,8 @@ fn main() {
         .with_utc_timestamps()
         .init()
         .unwrap();
+    
+    //println!("[DEBUG_INFO] STARTING MAIN!");
     let matches = App::new("roughenough client")
         .version(roughenough_version().as_ref())
         .arg(Arg::with_name("host")
@@ -391,6 +395,8 @@ fn main() {
         )
         .get_matches();
 
+    
+    
     let host = matches.value_of("host").unwrap();
     let port = value_t_or_exit!(matches.value_of("port"), u16);
     let verbose = matches.is_present("verbose");
@@ -428,11 +434,14 @@ fn main() {
 
     // let start = Instant::now();
     // loop{
+        //println!("[DEBUG_INFO] START ADDING REQUESTS!");
+
     let mut requests = Vec::with_capacity(num_requests);
     let mut file_for_requests =
         output_requests.map(|o| File::create(o).expect("Failed to create file!"));
     let mut file_for_responses =
         output_responses.map(|o| File::create(o).expect("Failed to create file!"));
+
 
     for _ in 0..num_requests {
         let nonce = create_nonce(version);
@@ -446,11 +455,14 @@ fn main() {
         requests.push((nonce, request, socket));
     }
 
+        //println!("[DEBUG_INFO] START SENDING REQUESTS!");
     for &mut (_, ref request, ref mut socket) in &mut requests {
         socket.send_to(request, addr).unwrap();
     }
 
+        //println!("[DEBUG_INFO] START COLLECTING RESPONSES LOOP!");    
     for (nonce, _, socket) in requests {
+            //println!("[DEBUG_INFO] ENTER COLLECTING RESPONSES LOOP!");
         let mut buf = [0u8; 4096];
         let resp_len = socket.recv_from(&mut buf).unwrap().0;
 
@@ -459,12 +471,14 @@ fn main() {
                 .expect("Failed to write to file!")
         }
 
+            //println!("[DEBUG_INFO] EXTRACT MESSAGE FROM RESPONSES!");     
         let resp = receive_response(version, &buf, resp_len);
 
         if text_dump {
             eprintln!("Response = {}", resp);
         }
 
+            //println!("[DEBUG_INFO] PARSE RECEIVED MESSAGE!");     
         let ParsedResponse {
             verified,
             midpoint,
@@ -478,6 +492,7 @@ fn main() {
             .read_u32::<LittleEndian>()
             .unwrap();
 
+            //println!("[DEBUG_INFO] CALCULATE TIME FROM SREP IN MESSAGE!");  
         let seconds = midpoint / 10_u64.pow(6);
         let nsecs = (midpoint - (seconds * 10_u64.pow(6))) * 10_u64.pow(3);
         let verify_str = if verified { "Yes" } else { "No" };
@@ -490,6 +505,7 @@ fn main() {
             ts.format(time_format).to_string()
         };
 
+            //println!("[DEBUG_INFO] PRINT TIME AND OTHER INFO!");      
         if verbose {
 
                 info!(
@@ -513,6 +529,7 @@ fn main() {
         }
     }
         println!("Time taken to complete: {}", start_request.elapsed().as_micros());
+        //println!("[DEBUG_INFO] MAIN ENDS!");   
     //     let elapsed = start.elapsed();
     //     if elapsed.as_millis() > 10000 as u128{
     //         println!("End at {}", elapsed.as_millis());
