@@ -425,6 +425,9 @@ fn main() {
         stress_test_forever(version, &addr)
     }
 
+
+    // let start = Instant::now();
+    // loop{
     let mut requests = Vec::with_capacity(num_requests);
     let mut file_for_requests =
         output_requests.map(|o| File::create(o).expect("Failed to create file!"));
@@ -510,4 +513,10 @@ fn main() {
         }
     }
         println!("Time taken to complete: {}", start_request.elapsed().as_micros());
+    //     let elapsed = start.elapsed();
+    //     if elapsed.as_millis() > 10000 as u128{
+    //         println!("End at {}", elapsed.as_millis());
+    //         break;
+    //     }
+    // }
 }
