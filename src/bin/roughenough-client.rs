@@ -20,10 +20,11 @@ extern crate log;
 use std::alloc::System;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{Cursor, Write};
+use std::io::{Cursor, Write, self};
 use std::iter::Iterator;
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use std::process::exit;
+use std::thread::sleep;
 use std::time::{self, SystemTime, UNIX_EPOCH, Instant};
 use std::usize;
 use log::{LevelFilter, info};
@@ -463,21 +464,36 @@ fn main() {
     }
 
         //println!("[DEBUG_INFO] START COLLECTING RESPONSES LOOP!");    
-    for (nonce, _, socket) in requests {
+    'outer: for (nonce, _, socket) in requests {
             //println!("[DEBUG_INFO] ENTER COLLECTING RESPONSES LOOP!");
         let mut buf = [0u8; 4096];
-            let resp = socket.recv_from(&mut buf);
-            let resp_len = match resp {
-                Ok((sz, _saddr)) => sz,
-                Err(_error) => continue
-            };
-            // NON BLOCKING LOOP: Should actually be implemented inside a loop. For more details, refer to ...
-            // https://doc.rust-lang.org/std/net/struct.UdpSocket.html#method.set_nonblocking
-            // I didn't use loop because I want to continue after error. I want control to return to main loop.
+        let mut flag = false;
 
-            // let resp_len = socket
-            //     .recv_from(&mut buf)
-            //     .unwrap().0;
+        let (resp_len, _) = loop {
+            match socket.recv_from(&mut buf) {
+                Ok(n) => break n,
+                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    if flag {
+                        flag = false;
+                        continue 'outer;
+                    }
+                    sleep(time::Duration::from_micros(100));
+                    flag = true;
+                    continue;
+                },
+                Err(e) => panic!("encountered IO error: {}", e),
+            }
+        };
+            // let resp = socket.recv_from(&mut buf);
+            // let resp_len = match resp {
+            //     Ok((sz, _saddr)) => sz,
+            //     Err(_error) => continue
+            // };
+            // ^^ OLD way of doing non-blocking. It used to skip a lot of sockets without waiting for any....
+            // NON BLOCKING LOOP: Should actually be implemented inside a loop with a wait mechanism. For more details, refer to ...
+            // https://doc.rust-lang.org/std/net/struct.UdpSocket.html#method.set_nonblocking
+            // I want control to return to main loop.
+
 
         if let Some(f) = file_for_responses.as_mut() {
             f.write_all(&buf[0..resp_len])
@@ -522,14 +538,10 @@ fn main() {
         if verbose {
 
                 info!(
-                "Received time from server: midpoint={:?}, radius={:?}, verified={} (merkle_index={})",
-                out, radius, verify_str, index
+                "Received time from server: midpoint={:?}, radius={:?}, verified={} flag={} (merkle_index={})",
+                out, radius, verify_str, flag, index
             );
 
-                // eprintln!(
-                //     "Received time from server: midpoint={:?}, radius={:?}, verified={} (merkle_index={})",
-                //     out, radius, verify_str, index
-                // );
         }
 
         if json {
