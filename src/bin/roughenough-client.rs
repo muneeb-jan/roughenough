@@ -16,6 +16,7 @@
 #[macro_use]
 extern crate clap;
 extern crate log;
+extern crate num_cpus;
 
 use std::alloc::System;
 use std::collections::HashMap;
@@ -23,10 +24,13 @@ use std::fs::File;
 use std::io::{Cursor, Write, self};
 use std::iter::Iterator;
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
+use std::thread;
 use std::process::exit;
 use std::thread::sleep;
 use std::time::{self, SystemTime, UNIX_EPOCH, Instant};
 use std::usize;
+use std::sync::{Arc, Barrier};
+
 use log::{LevelFilter, info};
 use mio::Events;
 use simple_logger::SimpleLogger;
@@ -41,7 +45,7 @@ use ring::rand::SecureRandom;
 
 use roughenough::{
     CERTIFICATE_CONTEXT, Error, RFC_REQUEST_FRAME_BYTES, roughenough_version, RtMessage, SIGNED_RESPONSE_CONTEXT,
-    Tag,
+    Tag, version,
 };
 use roughenough::merkle::MerkleTree;
 use roughenough::sign::Verifier;
@@ -163,6 +167,95 @@ fn stress_test_forever(ver: Version, addr: &SocketAddr) -> () {
     }
     }
     exit(0);
+}
+
+fn use_multithread_batching(num_threads: usize, version: Version, host: &str, port:u16, use_utc: bool) {
+    println!("Multithreaded Batching starts!");
+    let start_request = Instant::now();
+    let time_format= "%b %d %Y %H:%M:%S.%f %Z";
+    let addr = (host, port).to_socket_addrs().unwrap().next().unwrap();
+
+    println!("Total cores: {}",  num_cpus::get());
+
+    let mut handles = vec![];
+    let barrier = Arc::new(Barrier::new(num_threads));
+
+    for _ in 0..num_threads {
+        let bar = Arc::clone(&barrier);
+        let handle = thread::spawn(move || {
+            let nonce = create_nonce(version);
+            let socket = UdpSocket::bind(if addr.is_ipv6() { "[::]:0" } else { "0.0.0.0:0" }).expect("Couldn't open UDP socket");
+            socket.set_nonblocking(true).unwrap();
+            let request = make_request(version, &nonce, false);
+
+            bar.wait(); //BARRIER HERE. THREADS WAIT TILL REQUESTS ARE FORMED AND THEN SEND AT SAME TIME.
+
+            socket.send_to(&request, addr).unwrap();
+
+            let mut buf = [0u8; 4096];
+            let mut flag = 0;
+
+
+            let (resp_len, _) = loop {
+                match socket.recv_from(&mut buf) {
+                    Ok(n) => break n,
+                    Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        if flag > 4 {
+                            return;
+                        }
+                        thread::sleep(time::Duration::from_micros(20));
+                        flag += 1;
+                        continue;
+                    },
+                    Err(e) => panic!("encountered IO error: {}", e),
+                }
+            };
+
+            let resp = receive_response(version, &buf, resp_len);
+
+            let ParsedResponse {
+                verified,
+                midpoint,
+                radius,
+            } = ResponseHandler::new(version, None , resp.clone(), nonce.clone())
+                .extract_time();
+
+
+            let map = resp.into_hash_map();
+            let index = map[&Tag::INDX]
+                .as_slice()
+                .read_u32::<LittleEndian>()
+                .unwrap();
+            let seconds = midpoint / 10_u64.pow(6);
+            let nsecs = (midpoint - (seconds * 10_u64.pow(6))) * 10_u64.pow(3);
+            let verify_str = if verified { "Yes" } else { "No" };
+
+            let out = if use_utc {
+                let ts = Utc.timestamp(seconds as i64, nsecs as u32);
+                ts.format(time_format).to_string()
+            } else {
+                let ts = Local.timestamp(seconds as i64, nsecs as u32);
+                ts.format(time_format).to_string()
+            };
+    
+                //println!("[DEBUG_INFO] PRINT TIME AND OTHER INFO!");      
+            info!(
+            "Received time from server: midpoint={:?}, radius={:?}, verified={} flag={} (merkle_index={})",
+            out, radius, verify_str, flag, index
+            );
+        
+        });
+        handles.push(handle);   
+    }
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+
+        println!("Time taken to complete: {}", start_request.elapsed().as_micros());
+    exit(0)
+    
 }
 
 struct ResponseHandler {
@@ -352,6 +445,13 @@ fn main() {
             .long("public-key")
             .takes_value(true)
             .help("The server public key used to validate responses. If unset, no validation will be performed."))
+        .arg(Arg::with_name("multithread-batch")
+            .short("m")
+            .long("multithread-batch")
+            .takes_value(true)
+            .help("Use thread parallelization to create multiple requests. It will create m threads as specifided. (For efficiency m = num of cores)")
+            .default_value("1")
+        )
         .arg(Arg::with_name("time-format")
             .short("f")
             .long("time-format")
@@ -404,6 +504,7 @@ fn main() {
     let verbose = matches.is_present("verbose");
     let text_dump = matches.is_present("dump");
     let json = matches.is_present("json");
+    let multithread_batch = value_t_or_exit!(matches.value_of("multithread-batch"), u16) as usize;
     let num_requests = value_t_or_exit!(matches.value_of("num-requests"), u16) as usize;
     let time_format = matches.value_of("time-format").unwrap();
     let stress = matches.is_present("stress");
@@ -431,6 +532,10 @@ fn main() {
 
     if stress {
         stress_test_forever(version, &addr)
+    }
+
+    if multithread_batch > 1 {
+        use_multithread_batching(multithread_batch, version, host, port, use_utc)
     }
 
 
