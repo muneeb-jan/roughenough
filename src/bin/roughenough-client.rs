@@ -200,10 +200,10 @@ fn use_multithread_batching(num_threads: usize, version: Version, host: &str, po
                 match socket.recv_from(&mut buf) {
                     Ok(n) => break n,
                     Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                        if flag > 4 {
+                        if flag > 9 {
                             return;
                         }
-                        thread::sleep(time::Duration::from_micros(20));
+                        thread::sleep(time::Duration::from_micros(15));
                         flag += 1;
                         continue;
                     },
