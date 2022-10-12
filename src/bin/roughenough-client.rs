@@ -187,6 +187,11 @@ fn use_multithread_batching(num_threads: usize, version: Version, host: &str, po
             let socket = UdpSocket::bind(if addr.is_ipv6() { "[::]:0" } else { "0.0.0.0:0" }).expect("Couldn't open UDP socket");
             socket.set_nonblocking(true).unwrap();
             let request = make_request(version, &nonce, false);
+            let pkey = "d0756ee69ff5fe96cbcf9273208fec53124b1dd3a24d3910e07c7c54e2473012"; 
+            let opkey = HEX.decode(pkey.as_ref())
+                .or_else(|_| BASE64.decode(pkey.as_ref()))
+                .expect("Error parsing public key!");
+            let pub_key : Option<Vec<u8>> = Some(opkey);
 
             bar.wait(); //BARRIER HERE. THREADS WAIT TILL REQUESTS ARE FORMED AND THEN SEND AT SAME TIME.
 
@@ -217,9 +222,9 @@ fn use_multithread_batching(num_threads: usize, version: Version, host: &str, po
                 verified,
                 midpoint,
                 radius,
-            } = ResponseHandler::new(version, None , resp.clone(), nonce.clone())
+            } = ResponseHandler::new(version, pub_key.clone() , resp.clone(), nonce.clone())
                 .extract_time();
-
+            // REPLACE pub_key.clone by None in the above line to get Unverified time
 
             let map = resp.into_hash_map();
             let index = map[&Tag::INDX]
@@ -517,7 +522,7 @@ fn main() {
     let output_responses = matches.value_of("output-responses");
     let protocol = value_t_or_exit!(matches.value_of("protocol"), u8);
     let use_utc = matches.is_present("zulu");
-    let start_request = Instant::now();
+    let begin_process = Instant::now();
     if verbose {
         info!("Requesting time from: {:?}:{:?}", host, port);
     }
@@ -612,6 +617,9 @@ fn main() {
             eprintln!("Response = {}", resp);
         }
 
+        info!("Received time from server.");
+        let start_request = Instant::now();
+
             //println!("[DEBUG_INFO] PARSE RECEIVED MESSAGE!");     
         let ParsedResponse {
             verified,
@@ -657,8 +665,8 @@ fn main() {
         } else {
             println!("{}", out);
         }
+        println!("Time taken to parse, verify and print: {}", start_request.elapsed().as_micros());
     }
-        println!("Time taken to complete: {}", start_request.elapsed().as_micros());
         //println!("[DEBUG_INFO] MAIN ENDS!");   
     //     let elapsed = start.elapsed();
     //     if elapsed.as_millis() > 10000 as u128{
@@ -666,4 +674,5 @@ fn main() {
     //         break;
     //     }
     // }
+    println!("Total time taken: {}", begin_process.elapsed().as_micros());
 }
