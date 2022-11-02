@@ -263,6 +263,83 @@ fn use_multithread_batching(num_threads: usize, version: Version, host: &str, po
     
 }
 
+
+// fn use_parallel_requests(num_threads: usize, version: Version, host: &str, port:u16, use_utc: bool, nonce:Vec<u8>) {
+//     let start_request = Instant::now();
+//     let time_format= "%b %d %Y %H:%M:%S.%f %Z";
+//     let addr = (host, port).to_socket_addrs().unwrap().next().unwrap();
+//     let request = make_request(version, &nonce, false);
+
+//     let handle = thread::spawn(move || {
+//         let nonce_thread = nonce.clone();
+//         let socket = UdpSocket::bind("127.0.0.1:50000" ).expect("Couldn't open UDP socket");
+//         socket.set_nonblocking(true).unwrap();
+//         //let request = make_request(version, &nonce_thread, false);
+
+//         socket.send_to(&request, addr).unwrap();
+
+//         let mut buf = [0u8; 4096];
+//         let mut flag = 0;
+
+
+//         let (resp_len, _) = loop {
+//             match socket.recv_from(&mut buf) {
+//                 Ok(n) => break n,
+//                 Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+//                     if flag > 4 {
+//                         return;
+//                     }
+//                     thread::sleep(time::Duration::from_micros(20));
+//                     flag += 1;
+//                     continue;
+//                 },
+//                 Err(e) => panic!("encountered IO error: {}", e),
+//             }
+//         };
+
+//         let resp = receive_response(version, &buf, resp_len);
+
+//         let ParsedResponse {
+//             verified,
+//             midpoint,
+//             radius,
+//         } = ResponseHandler::new(version, None , resp.clone(), nonce_thread.clone())
+//             .extract_time();
+
+
+//         let map = resp.into_hash_map();
+//         let index = map[&Tag::INDX]
+//             .as_slice()
+//             .read_u32::<LittleEndian>()
+//             .unwrap();
+//         let seconds = midpoint / 10_u64.pow(6);
+//         let nsecs = (midpoint - (seconds * 10_u64.pow(6))) * 10_u64.pow(3);
+//         let verify_str = if verified { "Yes" } else { "No" };
+
+//         let out = if use_utc {
+//             let ts = Utc.timestamp(seconds as i64, nsecs as u32);
+//             ts.format(time_format).to_string()
+//         } else {
+//             let ts = Local.timestamp(seconds as i64, nsecs as u32);
+//             ts.format(time_format).to_string()
+//         };
+
+//             //println!("[DEBUG_INFO] PRINT TIME AND OTHER INFO!");      
+//         info!(
+//         "Received time from server: midpoint={:?}, radius={:?}, verified={} flag={} (merkle_index={})",
+//         out, radius, verify_str, flag, index
+//         );
+    
+//     });
+//     handle.join().unwrap();
+
+
+
+//     println!("Time taken to complete: {}", start_request.elapsed().as_micros());
+//     exit(0)
+    
+// }
+
 struct ResponseHandler {
     pub_key: Option<Vec<u8>>,
     msg: HashMap<Tag, Vec<u8>>,
@@ -318,6 +395,8 @@ impl ResponseHandler {
             .read_u32::<LittleEndian>()
             .unwrap();
 
+        let begin_verification = Instant::now();
+
         let verified = if self.pub_key.is_some() {
             self.validate_dele();
             self.validate_srep();
@@ -327,6 +406,8 @@ impl ResponseHandler {
         } else {
             false
         };
+
+        println!("Time taken to verify sign  : {}", begin_verification.elapsed().as_micros());
 
         ParsedResponse {
             verified,
