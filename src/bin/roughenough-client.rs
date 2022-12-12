@@ -636,18 +636,17 @@ fn main() {
     'outer: for (nonce, _, socket) in requests {
             //println!("[DEBUG_INFO] ENTER COLLECTING RESPONSES LOOP!");
         let mut buf = [0u8; 4096];
-        let mut flag = false;
+        let mut flag = 0;
 
         let (resp_len, _) = loop {
             match socket.recv_from(&mut buf) {
                 Ok(n) => break n,
                 Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    if flag {
-                        flag = false;
+                    if flag > 60 {
                         continue 'outer;
                     }
-                    sleep(time::Duration::from_micros(100));
-                    flag = true;
+                    thread::sleep(time::Duration::from_micros(3));
+                    flag += 1;
                     continue;
                 },
                 Err(e) => panic!("encountered IO error: {}", e),
