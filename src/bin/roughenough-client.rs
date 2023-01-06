@@ -341,7 +341,7 @@ impl ResponseHandler {
             .read_u32::<LittleEndian>()
             .unwrap();
 
-        let begin_verification = Instant::now();
+        // let begin_verification = Instant::now();
 
         let verified = if self.pub_key.is_some() {
             self.validate_dele();
@@ -353,7 +353,7 @@ impl ResponseHandler {
             false
         };
 
-        println!("Time taken to verify sign  : {}", begin_verification.elapsed().as_micros());
+        // println!("Time taken to verify sign  : {}", begin_verification.elapsed().as_micros());
 
         ParsedResponse {
             verified,
@@ -671,6 +671,8 @@ fn main() {
             //println!("[DEBUG_INFO] EXTRACT MESSAGE FROM RESPONSES!");     
         let resp = receive_response(version, &buf, resp_len);
 
+        println!("Begin Thread Operation TS: {}", begin_process.elapsed().as_micros());
+
         tx.send(resp.clone()).unwrap();
 
         if text_dump {
@@ -678,7 +680,7 @@ fn main() {
         }
 
         info!("Received time from server.");
-        let start_request = Instant::now();
+        // let start_request = Instant::now();
 
             //println!("[DEBUG_INFO] PARSE RECEIVED MESSAGE!");     
         let ParsedResponse {
@@ -725,9 +727,8 @@ fn main() {
         } else {
             println!("{}", out);
         }
-        println!("Time taken to parse, verify and print: {}", start_request.elapsed().as_micros());
+        // println!("Time taken to parse, verify and print: {}", start_request.elapsed().as_micros());
     }
-    parser_thread.join().expect("Error in Thread");
         //println!("[DEBUG_INFO] MAIN ENDS!");   
     //     let elapsed = start.elapsed();
     //     if elapsed.as_millis() > 10000 as u128{
