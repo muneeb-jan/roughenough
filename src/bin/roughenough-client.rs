@@ -727,6 +727,7 @@ fn main() {
         } else {
             println!("{}", out);
         }
+        println!("Main thread prints: {}", begin_process.elapsed().as_micros());
         // println!("Time taken to parse, verify and print: {}", start_request.elapsed().as_micros());
     }
         //println!("[DEBUG_INFO] MAIN ENDS!");   
